@@ -1,0 +1,47 @@
+services:
+  wallet_database:
+    build: ./db
+    ports:
+      - "${DB_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: ${DB_HOST}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  wallet-sub-system:
+    build: ./wallet-sub-system
+    container_name: wallet-service
+    ports:
+      - ${WALLET_SERVER_PORT}:${WALLET_SERVER_PORT}
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE}
+      SERVER_PORT: ${WALLET_SERVER_PORT}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - wallet_database
+
+  history-sub-system:
+      build: ./history-sub-system
+      container_name: history-service
+      ports:
+        - ${HISTORY_SERVER_PORT}:${HISTORY_SERVER_PORT}
+      environment:
+        SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE}
+        SERVER_PORT: ${HISTORY_SERVER_PORT}
+        DB_HOST: ${DB_HOST}
+        DB_PORT: ${DB_PORT}
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      depends_on:
+        - wallet_database
+
+volumes:
+  db-data:
