@@ -1,0 +1,53 @@
+package com.jerry.wallet.model;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Entity representing wallet transactions such as funding and transfers.
+ * @author Jeremiah Udoh
+ * @since 27th May 2026
+ */
+@Entity
+@Getter
+@Setter
+public class WalletTransactions {
+
+    @Id
+    private String id = UUID.randomUUID().toString();
+
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TransactionType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TransactionStatus status;
+
+    @Column(updatable = false, insertable = false)
+    private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(nullable = false)
+    private Wallets wallet;
+
+    public enum TransactionType {
+        FUND,
+        TRANSFER_OUT,
+        TRANSFER_IN
+    }
+
+    public enum TransactionStatus {
+        COMPLETED,
+        FAILED
+    }
+
+}
