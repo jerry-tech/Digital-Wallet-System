@@ -12,4 +12,6 @@ import org.springframework.context.annotation.Configuration;
 @Setter
 public class KafkaTopicProperties {
     private String walletCreationTopic;
+    private String walletFundingTopic;
+    private String walletTransferTopic;
 }

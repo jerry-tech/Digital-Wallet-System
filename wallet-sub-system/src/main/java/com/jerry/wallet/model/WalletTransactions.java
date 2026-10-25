@@ -33,7 +33,7 @@ public class WalletTransactions {
     private TransactionStatus status;
 
     @Column(updatable = false, insertable = false)
-    private LocalDateTime createdAt;
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(nullable = false)

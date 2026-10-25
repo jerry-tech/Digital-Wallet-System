@@ -13,31 +13,31 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
-@RequestMapping("/wallets")
+@RequestMapping()
 @RequiredArgsConstructor
 public class WalletController {
 
     private final WalletService walletService;
 
-    @PostMapping("/create")
+    @PostMapping("/wallets/create")
     public ResponseEntity<?> createWalletForUser(@RequestBody CreateWalletDto createWalletDto) {
         walletService.createWalletForUser(createWalletDto);
         return ResponseEntity.ok("Wallet created successfully");
     }
 
-    @PostMapping("/{walletId}/fund")
+    @PostMapping("/wallets/{walletId}/fund")
     public ResponseEntity<?> fundWallet(@PathVariable String walletId, @RequestBody FundWalletDto fundWalletDto) {
         walletService.fundWallet(walletId, fundWalletDto);
         return ResponseEntity.ok("Wallet funded successfully");
     }
 
-    @PostMapping("/{walletId}/transfer")
+    @PostMapping("/wallets/{walletId}/transfer")
     public ResponseEntity<?> transferFunds(@PathVariable String walletId, @RequestBody WalletTransferDto walletTransferDto) {
         walletService.transferFunds(walletId, walletTransferDto);
         return ResponseEntity.ok("Funds transferred successfully");
     }
 
-    @GetMapping("/{walletId}")
+    @GetMapping("/wallets/{walletId}")
     public ResponseEntity<BigDecimal> getBalance(@PathVariable String walletId) {
         return ResponseEntity.ok(walletService.getBalance(walletId));
     }

@@ -3,6 +3,7 @@ package com.jerry.wallet.model;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -30,6 +31,7 @@ public class Wallets {
     private BigDecimal balance = BigDecimal.ZERO;
 
     @Column(nullable = false)
+    @Version
     private BigInteger version = BigInteger.valueOf(0);
 
     @Column(updatable = false, insertable = false)
