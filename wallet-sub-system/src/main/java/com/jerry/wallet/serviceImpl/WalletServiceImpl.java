@@ -1,26 +1,34 @@
 package com.jerry.wallet.serviceImpl;
 
-import com.jerry.wallet.config.KafkaTopicProperties;
 import com.jerry.wallet.dto.*;
-import com.jerry.wallet.enumuration.WalletEventTypeEnum;
+import com.jerry.wallet.enumuration.WalletEventTypeConstant;
 import com.jerry.wallet.exception.ErrorResponse;
+import com.jerry.wallet.exception.InsufficientFundsException;
 import com.jerry.wallet.model.WalletTransactions;
 import com.jerry.wallet.model.Wallets;
 import com.jerry.wallet.pojo.WalletPojo;
+import com.jerry.wallet.pojo.TransferResultPojo;
+import com.jerry.wallet.pojo.WalletTransactionPojo;
 import com.jerry.wallet.repository.WalletsRepository;
 import com.jerry.wallet.service.WalletService;
 import com.jerry.wallet.service.WalletTransactionService;
-import com.jerry.wallet.service.kafka.KafkaPublisherService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -35,45 +43,83 @@ import java.util.stream.Collectors;
 public class WalletServiceImpl implements WalletService {
 
     private final WalletsRepository walletsRepository;
-    private final KafkaPublisherService kafkaPublisherService;
-    private final KafkaTopicProperties kafkaTopicProperties;
     private final WalletTransactionService walletTransactionService;
+    private final ApplicationEventPublisher events;
+    private final TransactionTemplate transactionTemplate;
+    private static final int MAX_FUND_ATTEMPTS = 5;
 
     /**
      * Create a wallet for a user
      */
     @Override
     @Transactional
-    public void createWalletForUser(CreateWalletDto createWalletDto) {
-        String transactionId = java.util.UUID.randomUUID().toString();
+    public WalletPojo createWalletForUser(CreateWalletDto createWalletDto) {
 
-        Wallets wallets = new Wallets();
-        wallets.setUserId(createWalletDto.userId());//in a case where the user entity us available i would check if the user exists
-        wallets.setBalance(BigDecimal.ZERO);
+        Wallets wallet = new Wallets();
+        wallet.setUserId(createWalletDto.userId());//in a case where the user entity us available i would check if the user exists
+        wallet.setBalance(BigDecimal.ZERO);
 
-        walletsRepository.save(wallets);
+        walletsRepository.save(wallet);
 
-        kafkaPublisherService.sendMessage("Wallet created for user: " + createWalletDto.userId(), kafkaTopicProperties.getWalletCreationTopic());
+        events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.WALLET_CREATED, wallet, null,
+                BigDecimal.ZERO, null, null, null));
+
+        return new WalletPojo(wallet);
     }
 
     /**
      * Add money to wallet
      */
+
+    // ---- fund: optimistic locking + bounded retry (issue 3) ----
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void fundWallet(String walletId, FundWalletDto fundWalletDto) {
-        Wallets wallet = this.validateWalletExists(walletId);
-        wallet.setBalance(wallet.getBalance().add(fundWalletDto.amount()));
-        walletsRepository.save(wallet);
+    public WalletTransactionPojo fundWallet(String walletId, FundWalletDto dto) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return transactionTemplate.execute(status -> doFund(walletId, dto));
+            } catch (OptimisticLockingFailureException e) {
+                if (attempt >= MAX_FUND_ATTEMPTS) {
+                    throw new ErrorResponse(HttpStatus.CONFLICT, "Wallet is busy, please retry");
+                }
+                backoff(attempt);
+            }
+        }
     }
 
-    /**
-     * Send money to another wallet
-     */
+    private WalletTransactionPojo doFund(String walletId, FundWalletDto dto) {
+        Wallets wallet = validateWalletExists(walletId);
+        wallet.setBalance(wallet.getBalance().add(dto.amount()));      // flushed at commit; @Version is checked there
+
+        WalletTransactions txn = walletTransactionService.createWalletTransaction(new WalletTransactionDto(
+                wallet, dto.amount(), WalletTransactions.TransactionType.FUND, WalletTransactions.TransactionStatus.COMPLETED, null, wallet.getBalance()));
+
+        events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.WALLET_FUNDED, wallet, null,
+                dto.amount(), txn.getId(), null, WalletTransactions.TransactionType.FUND));              // amount funded, real txn id
+
+        return new WalletTransactionPojo(txn.getId(), wallet.getId(), wallet.getBalance());
+    }
+
+
     @Override
-    @Transactional
-    public void transferFunds(String walletFromId, WalletTransferDto walletTransferDto) {
-        String transactionId = java.util.UUID.randomUUID().toString();
+    public TransferResultPojo transferFunds(String walletFromId, WalletTransferDto dto) {
+        if (walletFromId.equals(dto.recipientWalletId())) {
+            throw new ErrorResponse(HttpStatus.BAD_REQUEST, "Source and recipient wallets cannot be the same");
+        }
+        String transferId = UUID.randomUUID().toString();
+        try {
+            return transactionTemplate.execute(status -> doTransfer(walletFromId, dto, transferId));
+        } catch (InsufficientFundsException e) {
+            recordFailedTransfer(walletFromId, dto, transferId);    // the first tx is already rolled back
+            throw e;
+        }
+    }
+
+
+    private TransferResultPojo doTransfer(String walletFromId, WalletTransferDto walletTransferDto, String transferId) {
+
+        if (walletFromId.equals(walletTransferDto.recipientWalletId())) {
+            throw new ErrorResponse(HttpStatus.BAD_REQUEST, "Source and recipient wallets cannot be the same");
+        }
 
         // 1. Lock both wallets (ORDER BY id to prevent deadlock)
         List<Wallets> listOfWalletsForUpdate = walletsRepository.findWalletsForUpdate(List.of(walletFromId, walletTransferDto.recipientWalletId()));
@@ -90,34 +136,45 @@ public class WalletServiceImpl implements WalletService {
 
         // 2. checking if the source wallet has sufficient funds for the transfer(Check A has >= $30)
         if (sourceWallet.getBalance().compareTo(walletTransferDto.amount()) < 0) {
-            throw new ErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient funds in sourceWallet");
+            throw new InsufficientFundsException();
         }
+
         // 3. Update both balances.
         sourceWallet.setBalance(sourceWallet.getBalance().subtract(walletTransferDto.amount()));
+        sourceWallet.setUpdatedAt(LocalDateTime.now());
+
         recipientWallet.setBalance(recipientWallet.getBalance().add(walletTransferDto.amount()));
+        recipientWallet.setUpdatedAt(LocalDateTime.now());
 
         // 4. save wallets transaction
-        walletTransactionService.createWalletTransaction(new WalletTransactionDto(
+        WalletTransactions out = walletTransactionService.createWalletTransaction(new WalletTransactionDto(
                 sourceWallet,
                 walletTransferDto.amount(),
                 WalletTransactions.TransactionType.TRANSFER_OUT,
-                WalletTransactions.TransactionStatus.COMPLETED
+                WalletTransactions.TransactionStatus.COMPLETED,
+                transferId, sourceWallet.getBalance()
         ));
 
-        walletTransactionService.createWalletTransaction(new WalletTransactionDto(
+        WalletTransactions in = walletTransactionService.createWalletTransaction(new WalletTransactionDto(
                 recipientWallet,
                 walletTransferDto.amount(),
                 WalletTransactions.TransactionType.TRANSFER_IN,
-                WalletTransactions.TransactionStatus.COMPLETED
+                WalletTransactions.TransactionStatus.COMPLETED,
+                transferId, recipientWallet.getBalance()
         ));
 
-        // 5. Save both wallets.
-        walletTransactionService.handleWalletTransactionPublishingEvent(
-                new WalletTransferEventDto(WalletEventTypeEnum.TRANSFER_COMPLETED, sourceWallet.getId(), sourceWallet.getUserId(), walletTransferDto.amount(), transactionId, LocalDateTime.now()));
+        // one event per side, so History can show "A sent" and "B received"
+        events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.TRANSFER_COMPLETED, sourceWallet,
+                recipientWallet.getId(), walletTransferDto.amount(), out.getId(), transferId, WalletTransactions.TransactionType.TRANSFER_OUT));
+
+        events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.TRANSFER_COMPLETED, recipientWallet,
+                sourceWallet.getId(), walletTransferDto.amount(), in.getId(), transferId, WalletTransactions.TransactionType.TRANSFER_IN));
 
 
         // 6. Commit
         walletsRepository.saveAll(listOfWalletsForUpdate);
+
+        return new TransferResultPojo(transferId, out.getId(), sourceWallet.getBalance(), recipientWallet.getBalance());
     }
 
     /**
@@ -133,10 +190,16 @@ public class WalletServiceImpl implements WalletService {
      * Retrieve wallets for a user with pagination
      */
     @Override
-    public List<WalletPojo> getUserWallets(String userId, Long limit, Long offset) {
-        return walletsRepository.findWalletsByUserId(userId, PageRequest.of(offset.intValue(), limit.intValue()))
+    public List<WalletPojo> getUserWallets(String userId, Long limit, Long pageNumber, Sort.Direction sortOrderConstant) {
+        Pageable pageable = PageRequest.of(
+                pageNumber.intValue(),
+                limit.intValue(),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
+        return walletsRepository.findWalletsByUserId(userId, pageable)
                 .stream()
-                .map(x -> new WalletPojo(x.getBalance(), x.getCreatedAt(), x.getVersion()))
+                .map(WalletPojo::new)
                 .toList();
     }
 
@@ -144,5 +207,25 @@ public class WalletServiceImpl implements WalletService {
     private Wallets validateWalletExists(String walletId) {
         return walletsRepository.findById(walletId)
                 .orElseThrow(() -> new ErrorResponse(HttpStatus.NOT_FOUND, "Wallet not found for id: " + walletId));
+    }
+
+    private void backoff(int attempt) {
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextLong(10L * attempt, 50L * attempt));   // jitter
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "Interrupted");
+        }
+    }
+
+    private void recordFailedTransfer(String fromId, WalletTransferDto dto, String transferId) {
+        transactionTemplate.executeWithoutResult(status -> walletsRepository.findById(fromId).ifPresent(source -> {
+            WalletTransactions failed = walletTransactionService.createWalletTransaction(new WalletTransactionDto(
+                    source, dto.amount(), WalletTransactions.TransactionType.TRANSFER_OUT, WalletTransactions.TransactionStatus.FAILED,
+                    transferId, source.getBalance()));
+
+            events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.TRANSFER_FAILED, source,
+                    dto.recipientWalletId(), dto.amount(), failed.getId(), transferId, WalletTransactions.TransactionType.TRANSFER_OUT));
+        }));
     }
 }

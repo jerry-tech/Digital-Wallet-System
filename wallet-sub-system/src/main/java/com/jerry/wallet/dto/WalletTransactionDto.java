@@ -6,5 +6,5 @@ import com.jerry.wallet.model.Wallets;
 import java.math.BigDecimal;
 
 public record WalletTransactionDto (Wallets wallet, BigDecimal amount, WalletTransactions.TransactionType transactionType,
-                                    WalletTransactions.TransactionStatus transactionStatus) {
+                                    WalletTransactions.TransactionStatus transactionStatus, String transferId, BigDecimal balanceAfter) {
 }

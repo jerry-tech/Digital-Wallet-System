@@ -12,7 +12,9 @@ import java.util.Collection;
 import java.util.List;
 
 public interface WalletsRepository extends JpaRepository<Wallets, String> {
-    List<Wallets> findWalletsByUserId(String userId, Pageable pageable);
+
+    @Query("SELECT w FROM Wallets w WHERE w.userId = :userId")
+    List<Wallets> findWalletsByUserId(@Param("userId") String userId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT w FROM Wallets w WHERE w.id IN :walletIds ORDER BY w.id") //Lock both wallets (ORDER BY id to prevent deadlock)

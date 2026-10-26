@@ -32,12 +32,18 @@ public class WalletTransactions {
     @Column(nullable = false, length = 20)
     private TransactionStatus status;
 
-    @Column(updatable = false, insertable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(nullable = false)
     private Wallets wallet;
+
+    @Column(length = 36)
+    private String transferId;
+
+    @Column(precision = 19, scale = 4)
+    private BigDecimal balanceAfter;
 
     public enum TransactionType {
         FUND,

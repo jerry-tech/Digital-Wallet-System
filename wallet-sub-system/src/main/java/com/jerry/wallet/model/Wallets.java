@@ -32,9 +32,9 @@ public class Wallets {
 
     @Column(nullable = false)
     @Version
-    private BigInteger version = BigInteger.valueOf(0);
+    private Long version;
 
-    @Column(updatable = false, insertable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(insertable = false)

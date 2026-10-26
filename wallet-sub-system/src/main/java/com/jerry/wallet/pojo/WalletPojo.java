@@ -1,5 +1,6 @@
 package com.jerry.wallet.pojo;
 
+import com.jerry.wallet.model.Wallets;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,13 +11,13 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class WalletPojo {
+    private String id;
     private BigDecimal balance;
-    private BigInteger version;
-    private LocalDateTime createdAt;
+    private String userId;
 
-    public WalletPojo(BigDecimal balance, LocalDateTime createdAt, BigInteger version) {
-        this.balance = balance;
-        this.createdAt = createdAt;
-        this.version = version;
+    public WalletPojo(Wallets wallets) {
+        this.id = wallets.getId();
+        this.balance = wallets.getBalance();
+        this.userId = wallets.getUserId();
     }
 }

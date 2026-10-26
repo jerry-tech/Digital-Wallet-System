@@ -1,6 +1,6 @@
 package com.jerry.wallet.enumuration;
 
-public enum WalletEventTypeEnum {
+public enum WalletEventTypeConstant {
     WALLET_CREATED,
     WALLET_FUNDED,
     TRANSFER_COMPLETED,

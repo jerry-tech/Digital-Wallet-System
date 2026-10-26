@@ -24,21 +24,17 @@ public class WalletTransactionServiceImpl implements WalletTransactionService {
     private final KafkaTopicProperties kafkaTopicProperties;
     private final Gson gson;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Override
-    public void handleWalletTransactionPublishingEvent(WalletTransferEventDto walletTransferEventDto) {
-        // Publish the wallet transaction event to Kafka
-        kafkaPublisherService.sendMessage(gson.toJson(walletTransferEventDto), kafkaTopicProperties.getWalletTransferTopic());
-    }
 
     @Override
-    public void createWalletTransaction(WalletTransactionDto walletTransactionDto) {
+    public WalletTransactions createWalletTransaction(WalletTransactionDto walletTransactionDto) {
         WalletTransactions walletTransactions = new WalletTransactions();
         walletTransactions.setWallet(walletTransactionDto.wallet());
         walletTransactions.setAmount(walletTransactionDto.amount());
         walletTransactions.setType(walletTransactionDto.transactionType());
         walletTransactions.setStatus(walletTransactionDto.transactionStatus());
+        walletTransactions.setTransferId(walletTransactionDto.transferId());
+        walletTransactions.setBalanceAfter(walletTransactionDto.balanceAfter());
 
-        walletTransactionsRepository.save(walletTransactions);
+        return walletTransactionsRepository.save(walletTransactions);
     }
 }
