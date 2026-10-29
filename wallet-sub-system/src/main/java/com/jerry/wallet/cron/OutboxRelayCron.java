@@ -16,25 +16,25 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OutboxRelayCron {
 
-    private final OutboxEventRepository outbox;
-    private final KafkaPublisherService kafka;
+    private final OutboxEventRepository outboxEventRepository;
+    private final KafkaPublisherService kafkaPublisherService;
 
     @Value("${outbox.max-attempts:5}")
     private int maxAttempts;
 
     @Scheduled(fixedDelay = 1000)
     public void relay() {
-        for (OutboxEvent event : outbox.findTop100ByAttemptsLessThanOrderByIdAsc(maxAttempts)) {
+        for (OutboxEvent event : outboxEventRepository.findTop100ByAttemptsLessThanOrderByIdAsc(maxAttempts)) {
             try {
-                kafka.sendMessageWithCallback(event.getMessageKey(), event.getPayload(), event.getTopic()).get(5, TimeUnit.SECONDS);
-                outbox.delete(event);
+                kafkaPublisherService.sendMessageWithCallback(event.getMessageKey(), event.getPayload(), event.getTopic()).get(5, TimeUnit.SECONDS);
+                outboxEventRepository.delete(event);
             } catch (Exception ex) {
                 if (isBrokerUnavailable(ex)) {
                     log.warn("Kafka unavailable, will retry outbox id={}", event.getId());   // does not count
                     return;
                 }
                 event.setAttempts(event.getAttempts() + 1);
-                outbox.save(event);
+                outboxEventRepository.save(event);
                 if (event.getAttempts() >= maxAttempts) {
                     log.error("OUTBOX_PARKED id={} topic={} attempts={} payload={}", event.getId(), event.getTopic(), event.getAttempts(), event.getPayload(), ex);
                 }
