@@ -9,6 +9,7 @@ import org.apache.commons.lang3.time.DateUtils;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.text.ParseException;
 import java.time.*;
@@ -17,6 +18,7 @@ import java.util.Date;
 
 @Configuration
 @EntityScan("com.jerry.wallet.model")
+@EnableScheduling
 public class CustomConfiguration {
 
     @Bean

@@ -5,6 +5,7 @@ import com.jerry.wallet.dto.FundWalletDto;
 import com.jerry.wallet.dto.WalletTransferDto;
 import com.jerry.wallet.pojo.WalletPojo;
 import com.jerry.wallet.pojo.TransferResultPojo;
+import com.jerry.wallet.pojo.WalletTransactionPojo;
 import com.jerry.wallet.service.WalletService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -33,8 +34,8 @@ public class WalletController {
 
     @PostMapping("/wallets/{walletId}/fund")
     public ResponseEntity<?> fundWallet(@PathVariable String walletId, @RequestBody @Valid FundWalletDto fundWalletDto) {
-        TransferResultPojo transferResultPojo = walletService.fundWallet(walletId, fundWalletDto);
-        return ResponseEntity.status(HttpStatus.OK).body(transferResultPojo);
+        WalletTransactionPojo walletTransactionPojo = walletService.fundWallet(walletId, fundWalletDto);
+        return ResponseEntity.status(HttpStatus.OK).body(walletTransactionPojo);
     }
 
     @PostMapping("/wallets/{walletId}/transfer")

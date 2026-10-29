@@ -13,6 +13,7 @@ import com.jerry.wallet.repository.WalletsRepository;
 import com.jerry.wallet.service.WalletService;
 import com.jerry.wallet.service.WalletTransactionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.PageRequest;
@@ -46,7 +47,8 @@ public class WalletServiceImpl implements WalletService {
     private final WalletTransactionService walletTransactionService;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transactionTemplate;
-    private static final int MAX_FUND_ATTEMPTS = 5;
+    @Value("${wallet.funding.max-attempts:5}")
+    private int MAX_FUND_ATTEMPTS;
 
     /**
      * Create a wallet for a user
@@ -59,19 +61,18 @@ public class WalletServiceImpl implements WalletService {
         wallet.setUserId(createWalletDto.userId());//in a case where the user entity us available i would check if the user exists
         wallet.setBalance(BigDecimal.ZERO);
 
-        walletsRepository.save(wallet);
 
         events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.WALLET_CREATED, wallet, null,
                 BigDecimal.ZERO, null, null, null));
+
+        walletsRepository.save(wallet);
 
         return new WalletPojo(wallet);
     }
 
     /**
-     * Add money to wallet
+     * Add money to wallet: fund: optimistic locking + bounded retry (issue 3)
      */
-
-    // ---- fund: optimistic locking + bounded retry (issue 3) ----
     @Override
     public WalletTransactionPojo fundWallet(String walletId, FundWalletDto dto) {
         for (int attempt = 1; ; attempt++) {
@@ -88,7 +89,8 @@ public class WalletServiceImpl implements WalletService {
 
     private WalletTransactionPojo doFund(String walletId, FundWalletDto dto) {
         Wallets wallet = validateWalletExists(walletId);
-        wallet.setBalance(wallet.getBalance().add(dto.amount()));      // flushed at commit; @Version is checked there
+        wallet.setBalance(wallet.getBalance().add(dto.amount())); // flushed at commit; @Version is checked there
+        wallet.setUpdatedAt(LocalDateTime.now());
 
         WalletTransactions txn = walletTransactionService.createWalletTransaction(new WalletTransactionDto(
                 wallet, dto.amount(), WalletTransactions.TransactionType.FUND, WalletTransactions.TransactionStatus.COMPLETED, null, wallet.getBalance()));
@@ -211,7 +213,7 @@ public class WalletServiceImpl implements WalletService {
 
     private void backoff(int attempt) {
         try {
-            Thread.sleep(ThreadLocalRandom.current().nextLong(10L * attempt, 50L * attempt));   // jitter
+            Thread.sleep(ThreadLocalRandom.current().nextLong(10L * attempt, 50L * attempt));
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             throw new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "Interrupted");

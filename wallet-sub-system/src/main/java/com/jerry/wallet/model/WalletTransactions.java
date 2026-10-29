@@ -19,7 +19,8 @@ import java.util.UUID;
 public class WalletTransactions {
 
     @Id
-    private String id = UUID.randomUUID().toString();
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
@@ -39,6 +40,7 @@ public class WalletTransactions {
     @JoinColumn(nullable = false)
     private Wallets wallet;
 
+    //Added these two new fields to track transfer transactions, which also covers the audit part of issue 7:
     @Column(length = 36)
     private String transferId;
 
