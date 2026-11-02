@@ -31,5 +31,7 @@ public class OutboxEvent {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
-    private int attempts; // only for diagnosing a stuck row
+    private int attempts;
+
+    private Instant sentAt;
 }

@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -22,15 +24,23 @@ public class OutboxRelayCron {
     @Value("${outbox.max-attempts:5}")
     private int maxAttempts;
 
+    @Value("${outbox.retention-days:7}")
+    private long retentionDays;
+
     @Scheduled(fixedDelay = 1000)
     public void relay() {
-        for (OutboxEvent event : outboxEventRepository.findTop100ByAttemptsLessThanOrderByIdAsc(maxAttempts)) {
+        for (OutboxEvent event : outboxEventRepository.findTop100BySentAtIsNullAndAttemptsLessThanOrderByIdAsc(maxAttempts)) {
             try {
-                kafkaPublisherService.sendMessageWithCallback(event.getMessageKey(), event.getPayload(), event.getTopic()).get(5, TimeUnit.SECONDS);
-                outboxEventRepository.delete(event);
+                kafkaPublisherService.sendMessageWithCallback(event.getMessageKey(), event.getPayload(), event.getTopic())
+                        .get(5, TimeUnit.SECONDS);
+                event.setSentAt(Instant.now());
+                outboxEventRepository.save(event);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();// shutting down: stop without counting an attempt
+                return;
             } catch (Exception ex) {
                 if (isBrokerUnavailable(ex)) {
-                    log.warn("Kafka unavailable, will retry outbox id={}", event.getId());   // does not count
+                    log.warn("Kafka unavailable, will retry outbox id={}", event.getId());
                     return;
                 }
                 event.setAttempts(event.getAttempts() + 1);
@@ -40,6 +50,12 @@ public class OutboxRelayCron {
                 }
             }
         }
+    }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    public void purge() {
+        int removed = outboxEventRepository.purgeSentBefore(Instant.now().minus(retentionDays, ChronoUnit.DAYS));
+        log.info("Outbox purge removed {} rows older than {} days", removed, retentionDays);
     }
 
     private boolean isBrokerUnavailable(Throwable ex) {
