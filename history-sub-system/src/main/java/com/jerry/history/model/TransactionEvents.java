@@ -3,8 +3,11 @@ package com.jerry.history.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -15,11 +18,13 @@ import java.util.UUID;
  * @since 27th May 2026
  */
 @Entity
+@Table(name = "transaction_events", indexes = {
+        @Index(name = "idx_te_wallet_created", columnList = "walletId, createdAt"),
+        @Index(name = "idx_te_user_created", columnList = "userId, createdAt")})
 @Getter
 @Setter
 public class TransactionEvents {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @Id @Column(length = 36)
     private String id;
 
     @Column(nullable = false, length = 36)
@@ -37,10 +42,16 @@ public class TransactionEvents {
     @Column(length = 36)
     private String transactionId;
 
-    @Column(updatable = false, insertable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String eventData;
+
+    @Column(length = 36)
+    private String counterpartyWalletId;
+
+    @Column(nullable = false)
+    private Instant occurredAt;
 }
