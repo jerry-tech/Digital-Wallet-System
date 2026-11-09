@@ -15,7 +15,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,12 +33,13 @@ public class TransactionEventServiceImpl implements TransactionEventService {
     public void logWalletTransactionEventHistory(WalletEventPojo walletEventPojo, String payload) {
 
         // 1. fast path: we already stored this event (Kafka redelivery, outbox resend, consumer restart)
-        if (transactionEventRepository.existsById(walletEventPojo.eventId())) {
+        if (transactionEventRepository.findTransactionEventsByTransactionId(walletEventPojo.eventId().trim()).isPresent()) {
             log.info("Duplicate event ignored eventId={}", walletEventPojo.eventId());
             return;
         }
 
         TransactionEvents transactionEvent = new TransactionEvents();
+        transactionEvent.setId(walletEventPojo.eventId());
         transactionEvent.setTransactionId(walletEventPojo.eventId());
         transactionEvent.setEventType(walletEventPojo.eventType().name());
         transactionEvent.setEventData(payload);

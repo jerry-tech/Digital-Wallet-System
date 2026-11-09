@@ -58,7 +58,7 @@ public class WalletServiceImpl implements WalletService {
     public WalletPojo createWalletForUser(CreateWalletDto createWalletDto) {
 
         Wallets wallet = new Wallets();
-        wallet.setUserId(createWalletDto.userId());//in a case where the user entity us available i would check if the user exists
+        wallet.setUserId(createWalletDto.userId());
         wallet.setBalance(BigDecimal.ZERO);
 
 
@@ -96,7 +96,7 @@ public class WalletServiceImpl implements WalletService {
                 wallet, dto.amount(), WalletTransactions.TransactionType.FUND, WalletTransactions.TransactionStatus.COMPLETED, null, wallet.getBalance()));
 
         events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.WALLET_FUNDED, wallet, null,
-                dto.amount(), txn.getId(), null, WalletTransactions.TransactionType.FUND));              // amount funded, real txn id
+                dto.amount(), txn.getId(), null, WalletTransactions.TransactionType.FUND));
 
         return new WalletTransactionPojo(txn.getId(), wallet.getId(), wallet.getBalance());
     }
@@ -111,7 +111,7 @@ public class WalletServiceImpl implements WalletService {
         try {
             return transactionTemplate.execute(status -> doTransfer(walletFromId, dto, transferId));
         } catch (InsufficientFundsException e) {
-            recordFailedTransfer(walletFromId, dto, transferId);    // the first tx is already rolled back
+            recordFailedTransfer(walletFromId, dto, transferId);
             throw e;
         }
     }
@@ -165,7 +165,7 @@ public class WalletServiceImpl implements WalletService {
                 transferId, recipientWallet.getBalance()
         ));
 
-        // one event per side, so History can show "A sent" and "B received"
+        // 5. one event per side, so History can show "A sent" and "B received"
         events.publishEvent(WalletEventDto.of(WalletEventTypeConstant.TRANSFER_COMPLETED, sourceWallet,
                 recipientWallet.getId(), walletTransferDto.amount(), out.getId(), transferId, WalletTransactions.TransactionType.TRANSFER_OUT));
 

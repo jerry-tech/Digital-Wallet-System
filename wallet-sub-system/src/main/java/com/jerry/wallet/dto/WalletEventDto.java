@@ -18,7 +18,7 @@ public record WalletEventDto(
         String transactionId,           // id of the wallet_transactions row
         String transferId,              // shared by both legs of a transfer
         WalletTransactions.TransactionType transactionType,
-        Instant timestamp,              // UTC
+        Instant timestamp,
         int schemaVersion) {
 
     public static WalletEventDto of(WalletEventTypeConstant type, Wallets wallet, String counterpartyWalletId,

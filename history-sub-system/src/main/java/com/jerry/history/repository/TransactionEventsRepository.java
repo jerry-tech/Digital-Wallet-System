@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface TransactionEventsRepository extends JpaRepository<TransactionEvents, String> {
 
@@ -14,4 +15,6 @@ public interface TransactionEventsRepository extends JpaRepository<TransactionEv
     List<TransactionEvents> findTransactionEventsByWalletId(@Param("walletId") String walletId, Pageable pageable);
 
     List<TransactionEvents> findTransactionEventsByUserId(String userId, Pageable pageable);
+
+    Optional<TransactionEvents> findTransactionEventsByTransactionId(String transactionId);
 }

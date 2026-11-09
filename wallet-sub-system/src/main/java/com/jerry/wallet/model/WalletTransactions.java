@@ -40,7 +40,7 @@ public class WalletTransactions {
     @JoinColumn(nullable = false)
     private Wallets wallet;
 
-    //Added these two new fields to track transfer transactions, which also covers the audit part of issue 7:
+    //These two new fields to track transfer transactions, which also covers the audit part of issue 7:
     @Column(length = 36)
     private String transferId;
 
